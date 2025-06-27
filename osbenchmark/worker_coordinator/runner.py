@@ -1469,6 +1469,7 @@ class Query(Runner):
                 _set_initial_recall_values(params, result)
 
             doc_type = params.get("type")
+            profile = body["profile"]
             response = await self._raw_search(opensearch, doc_type, index, body, request_params, headers=headers)
 
             if detailed_results:
@@ -1503,6 +1504,22 @@ class Query(Runner):
                     continue
                 candidates.append(field_value)
             neighbors_dataset = params["neighbors"]
+
+            if profile:
+                shards = response_json['profile']['shards']
+                searches = shards[0]['searches']
+                query = searches[0]['query']
+                query_type = query[0]['type']
+                breakdown = query[0]['breakdown']
+                if query_type == 'KNNQuery':
+                    exact_search_after_ann = breakdown['exact_search_after_ann']
+                    exact_search_after_filter = breakdown['exact_search_after_filter']
+                    exact_search = int(exact_search_after_ann) + int(exact_search_after_filter)
+                else:
+                    exact_search = breakdown['exact_search']
+            
+                ann_search = breakdown['ann_search']
+                result.update({"ann_search": ann_search, "exact_search": exact_search})
 
             if "k" in params:
                 num_neighbors = params.get("k", 1)
