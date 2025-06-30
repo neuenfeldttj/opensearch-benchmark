@@ -1519,7 +1519,7 @@ class Query(Runner):
                     exact_search = breakdown['exact_search']
             
                 ann_search = breakdown['ann_search']
-                result.update({"ann_search": ann_search, "exact_search": exact_search})
+                result.update({"ann_search": ann_search / 1e6, "exact_search": exact_search / 1e6}) # convert ns to ms
 
             if "k" in params:
                 num_neighbors = params.get("k", 1)

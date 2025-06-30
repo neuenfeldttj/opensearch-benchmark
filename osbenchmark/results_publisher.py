@@ -257,12 +257,9 @@ class SummaryResultsPublisher:
         )
 
     def _publish_knn_profiler(self, values, task):
-        ann_mean = values["ann_search"]["mean"]
-        exact_mean = values["exact_search"]["mean"]
-
         return self._join(
-            self._line("Mean ANN Search", task, ann_mean, "ms", lambda v: "%.2f" % (v / 1e6)),
-            self._line("Mean Exact Search", task, exact_mean, "ms", lambda v: "%.2f" % (v / 1e6))
+            *self._publish_percentiles("ANN Search", task, values["ann_search"]),
+            *self._publish_percentiles("Exact Search", task, values["exact_search"])
         )
 
     def _publish_best_client_settings(self, record, task):
