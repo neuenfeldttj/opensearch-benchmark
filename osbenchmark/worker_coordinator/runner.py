@@ -1469,6 +1469,7 @@ class Query(Runner):
                 _set_initial_recall_values(params, result)
 
             doc_type = params.get("type")
+            profile = body.get("profile", False)
             response = await self._raw_search(opensearch, doc_type, index, body, request_params, headers=headers)
 
             if detailed_results:
@@ -1503,6 +1504,40 @@ class Query(Runner):
                     continue
                 candidates.append(field_value)
             neighbors_dataset = params["neighbors"]
+
+            def get_query_timings(query):
+                query_type = query['type']
+                breakdown = query['breakdown']
+                exact_search, ann_search = 0, 0
+                if query_type == 'KNNQuery':
+                    exact_search_after_ann = breakdown['exact_search_after_ann']
+                    exact_search_after_filter = breakdown['exact_search_after_filter']
+                    exact_search = int(exact_search_after_ann) + int(exact_search_after_filter)
+                elif "exact_search" in breakdown:
+                    exact_search = breakdown['exact_search']
+                if "ann_search" in breakdown: 
+                    ann_search = breakdown['ann_search']
+                if "children" in query:
+                    children = query['children']
+                    for child in children:
+                        child_exact, child_ann = get_query_timings(child)
+                        exact_search += child_exact
+                        ann_search += child_ann
+                
+                return exact_search, ann_search
+
+            if profile:
+                exact_search = 0
+                ann_search = 0
+                shards = response_json['profile']['shards']
+                for shard in shards:
+                    searches = shard['searches']
+                    for search in searches:
+                        queries = search['query']
+                        for query in queries:
+                            exact_search, ann_search = get_query_timings(query)
+            
+                result.update({"ann_search": ann_search / 1e6, "exact_search": exact_search / 1e6}) # convert ns to ms
 
             if "k" in params:
                 num_neighbors = params.get("k", 1)

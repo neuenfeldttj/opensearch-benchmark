@@ -1831,6 +1831,8 @@ class GlobalStatsCalculator:
                         task.operation.name,
                         self.single_latency(t, op_type, metric_name="recall@k"),
                         self.single_latency(t, op_type, metric_name="recall@1"),
+                        self.single_latency(t, op_type, metric_name="exact_search"),
+                        self.single_latency(t, op_type, metric_name="ann_search"),
                         error_rate,
                         duration,
                     )
@@ -2117,20 +2119,14 @@ class GlobalStats:
                     })
             elif metric == "correctness_metrics":
                 for item in value:
-                    if "recall@k" in item:
-                        all_results.append({
-                            "task": item["task"],
-                            "operation": item["operation"],
-                            "name": "recall@k",
-                            "value": item["recall@k"]
-                        })
-                    if "recall@1" in item:
-                        all_results.append({
-                            "task": item["task"],
-                            "operation": item["operation"],
-                            "name": "recall@1",
-                            "value": item["recall@1"]
-                        })
+                    for knn_metric in ["recall@k", "recall@1", "exact_search", "ann_search"]:
+                        if knn_metric in item:
+                            all_results.append({
+                                "task": item["task"],
+                                "operation": item["operation"],
+                                "name": knn_metric,
+                                "value": item[knn_metric]
+                            })
             elif metric.startswith("total_transform_") and value is not None:
                 for item in value:
                     all_results.append({
@@ -2174,12 +2170,14 @@ class GlobalStats:
             doc["meta"] = meta
         self.op_metrics.append(doc)
 
-    def add_correctness_metrics(self, task, operation, recall_at_k_stats, recall_at_1_stats, error_rate, duration):
+    def add_correctness_metrics(self, task, operation, recall_at_k_stats, recall_at_1_stats, exact_search_stats, ann_search_stats, error_rate, duration):
         self.correctness_metrics.append({
             "task": task,
             "operation": operation,
             "recall@k": recall_at_k_stats,
             "recall@1":recall_at_1_stats,
+            "exact_search": exact_search_stats,
+            "ann_search": ann_search_stats,
             "error_rate": error_rate,
             "duration": duration
             }

@@ -199,6 +199,10 @@ class SummaryResultsPublisher:
             if recall_keys_in_task_dict and "mean" in record["recall@1"] and "mean" in record["recall@k"]:
                 metrics_table.extend(self._publish_recall(record, task))
 
+            profile_keys_in_task_dict = "ann_search" in keys and "exact_search" in keys
+            if profile_keys_in_task_dict and "mean" in record["ann_search"] and "mean" in record["exact_search"]:
+                metrics_table.extend(self._publish_knn_profiler(record, task))
+
         self.write_results(metrics_table)
 
         if warnings:
@@ -250,6 +254,12 @@ class SummaryResultsPublisher:
         return self._join(
             self._line("Mean recall@k", task, recall_k_mean, "", lambda v: "%.2f" % v),
             self._line("Mean recall@1", task, recall_1_mean, "", lambda v: "%.2f" % v)
+        )
+
+    def _publish_knn_profiler(self, values, task):
+        return self._join(
+            *self._publish_percentiles("ANN Search", task, values["ann_search"]),
+            *self._publish_percentiles("Exact Search", task, values["exact_search"])
         )
 
     def _publish_best_client_settings(self, record, task):

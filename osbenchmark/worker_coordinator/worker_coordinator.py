@@ -1187,8 +1187,11 @@ class SamplePostprocessor:
                 self.logger.debug("Found: %s", sample.request_meta_data)
                 recall_metric_names = ["recall@k", "recall@1"]
 
-                for recall_metric_name in recall_metric_names:
-                    if recall_metric_name in sample.request_meta_data:
+                # vector-search profile enabled
+                profile_metric_names = ["ann_search", "exact_search"]
+
+                for knn_metric_name in recall_metric_names + profile_metric_names:
+                    if knn_metric_name in sample.request_meta_data:
                         meta_data = self.merge(
                             self.workload_meta_data,
                             self.test_procedure_meta_data,
@@ -1198,8 +1201,8 @@ class SamplePostprocessor:
                         )
 
                         self.metrics_store.put_value_cluster_level(
-                            name=recall_metric_name,
-                            value=sample.request_meta_data[recall_metric_name],
+                            name=knn_metric_name,
+                            value=sample.request_meta_data[knn_metric_name],
                             unit="",
                             task=sample.task.name,
                             operation=sample.operation_name,
