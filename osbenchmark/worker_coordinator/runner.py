@@ -1469,7 +1469,7 @@ class Query(Runner):
                 _set_initial_recall_values(params, result)
 
             doc_type = params.get("type")
-            profile = body["profile"]
+            profile = body.get("profile", False)
             response = await self._raw_search(opensearch, doc_type, index, body, request_params, headers=headers)
 
             if detailed_results:
