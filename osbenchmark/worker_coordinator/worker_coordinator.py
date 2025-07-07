@@ -1185,12 +1185,10 @@ class SamplePostprocessor:
             # if request_meta_data exists then it will have {"success": true/false} as a parameter.
             if sample.request_meta_data and len(sample.request_meta_data) > 1:
                 self.logger.debug("Found: %s", sample.request_meta_data)
+
                 recall_metric_names = ["recall@k", "recall@1"]
 
-                # vector-search profile enabled
-                profile_metric_names = ["ann_search", "exact_search"]
-
-                for knn_metric_name in recall_metric_names + profile_metric_names:
+                for knn_metric_name in recall_metric_names:
                     if knn_metric_name in sample.request_meta_data:
                         meta_data = self.merge(
                             self.workload_meta_data,
@@ -1203,6 +1201,29 @@ class SamplePostprocessor:
                         self.metrics_store.put_value_cluster_level(
                             name=knn_metric_name,
                             value=sample.request_meta_data[knn_metric_name],
+                            unit="",
+                            task=sample.task.name,
+                            operation=sample.operation_name,
+                            operation_type=sample.operation_type,
+                            sample_type=sample.sample_type,
+                            absolute_time=sample.absolute_time,
+                            relative_time=sample.relative_time,
+                            meta_data=meta_data,
+                        )
+
+                if "profile-metrics" in sample.request_meta_data:
+                    for metric_name, metric_value in sample.request_meta_data["profile-metrics"].items():
+                        meta_data = self.merge(
+                            self.workload_meta_data,
+                            self.test_procedure_meta_data,
+                            sample.operation_meta_data,
+                            sample.task.meta_data,
+                            sample.request_meta_data,
+                        )
+
+                        self.metrics_store.put_value_cluster_level(
+                            name=metric_name,
+                            value=metric_value,
                             unit="",
                             task=sample.task.name,
                             operation=sample.operation_name,

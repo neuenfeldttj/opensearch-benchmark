@@ -38,7 +38,7 @@ from functools import total_ordering
 from io import BytesIO
 from os.path import commonprefix
 import multiprocessing
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import ijson
 from opensearchpy import ConnectionTimeout
@@ -1167,6 +1167,31 @@ class Query(Runner):
         # disable eager response parsing - responses might be huge thus skewing results
         opensearch.return_raw_response()
 
+        def get_profile_metrics(response_json: Dict[str, Any], metrics: List) -> Dict[str, int]:
+            """
+            Traverses profile tree and sums each specific profile metric. Then converts ns to ms.
+            """
+            def _get_query_timings(query):
+                breakdown = query['breakdown']
+                for metric in metric_timings.keys():
+                    if metric in breakdown:
+                        metric_timings[metric] += breakdown[metric]
+                if "children" in query:
+                    children = query['children']
+                    for child in children:
+                        _get_query_timings(child)
+            
+            metric_timings = dict.fromkeys(metrics, 0)
+            shards = response_json['profile']['shards']
+            for shard in shards:
+                searches = shard['searches']
+                for search in searches:
+                    queries = search['query']
+                    for query in queries:
+                        _get_query_timings(query)
+            metric_timings = {key : value / 1e6 for key, value in metric_timings.items()}
+            return metric_timings
+
         async def _search_after_query(opensearch, params):
             index = params.get("index", "_all")
             pit_op = params.get("with-point-in-time-from")
@@ -1219,7 +1244,18 @@ class Query(Runner):
         async def _request_body_query(opensearch, params):
             doc_type = params.get("type")
 
+            profile = False
+            if "profile-metrics" in params and params.get("profile-metrics"):
+                body["profile"] = True
+                profile = True
+
             r = await self._raw_search(opensearch, doc_type, index, body, request_params, headers=headers)
+
+            result = {
+                "weight": 1,
+                "unit": "ops",
+                "success": True
+            }
 
             if detailed_results:
                 props = parse(r, ["hits.total", "hits.total.value", "hits.total.relation", "timed_out", "took"])
@@ -1228,21 +1264,18 @@ class Query(Runner):
                 timed_out = props.get("timed_out", False)
                 took = props.get("took", 0)
 
-                return {
-                    "weight": 1,
-                    "unit": "ops",
-                    "success": True,
+                result.update({
                     "hits": hits_total,
                     "hits_relation": hits_relation,
                     "timed_out": timed_out,
                     "took": took
-                }
-            else:
-                return {
-                    "weight": 1,
-                    "unit": "ops",
-                    "success": True
-                }
+                })
+
+            if profile:
+                metric_timings = get_profile_metrics(json.loads(r.getvalue()), params.get("profile-metrics"))
+                result.update(metric_timings)
+
+            return result
 
         async def _scroll_query(opensearch, params):
             hits = 0
@@ -1469,7 +1502,10 @@ class Query(Runner):
                 _set_initial_recall_values(params, result)
 
             doc_type = params.get("type")
-            profile = body.get("profile", False)
+            profile = False
+            if "profile-metrics" in params:
+                body["profile"] = True
+                profile = True
             response = await self._raw_search(opensearch, doc_type, index, body, request_params, headers=headers)
 
             if detailed_results:
@@ -1505,39 +1541,9 @@ class Query(Runner):
                 candidates.append(field_value)
             neighbors_dataset = params["neighbors"]
 
-            def get_query_timings(query):
-                query_type = query['type']
-                breakdown = query['breakdown']
-                exact_search, ann_search = 0, 0
-                if query_type == 'KNNQuery':
-                    exact_search_after_ann = breakdown['exact_search_after_ann']
-                    exact_search_after_filter = breakdown['exact_search_after_filter']
-                    exact_search = int(exact_search_after_ann) + int(exact_search_after_filter)
-                elif "exact_search" in breakdown:
-                    exact_search = breakdown['exact_search']
-                if "ann_search" in breakdown: 
-                    ann_search = breakdown['ann_search']
-                if "children" in query:
-                    children = query['children']
-                    for child in children:
-                        child_exact, child_ann = get_query_timings(child)
-                        exact_search += child_exact
-                        ann_search += child_ann
-                
-                return exact_search, ann_search
-
             if profile:
-                exact_search = 0
-                ann_search = 0
-                shards = response_json['profile']['shards']
-                for shard in shards:
-                    searches = shard['searches']
-                    for search in searches:
-                        queries = search['query']
-                        for query in queries:
-                            exact_search, ann_search = get_query_timings(query)
-            
-                result.update({"ann_search": ann_search / 1e6, "exact_search": exact_search / 1e6}) # convert ns to ms
+                metric_timings = get_profile_metrics(response_json, params.get("profile-metrics"))
+                result.update({"profile-metrics": metric_timings})
 
             if "k" in params:
                 num_neighbors = params.get("k", 1)
