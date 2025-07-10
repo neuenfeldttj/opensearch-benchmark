@@ -1173,14 +1173,18 @@ class Query(Runner):
             """
             def _get_query_timings(query):
                 breakdown = query['breakdown']
+                # metric_timings["query_time"] += query["time_in_nanos"]
                 for metric in metric_timings.keys():
-                    if metric in breakdown:
+                    if metric == "exact_search" and query['type'] == "KNNQuery":
+                        metric_timings[metric] += breakdown["exact_search_after_ann"] + breakdown["exact_search_after_filter"]
+                    elif metric in breakdown:
                         metric_timings[metric] += breakdown[metric]
                 if "children" in query:
                     children = query['children']
                     for child in children:
                         _get_query_timings(child)
             
+            metrics.append("query_time")
             metric_timings = dict.fromkeys(metrics, 0)
             shards = response_json['profile']['shards']
             for shard in shards:
@@ -1188,6 +1192,7 @@ class Query(Runner):
                 for search in searches:
                     queries = search['query']
                     for query in queries:
+                        metric_timings["query_time"] += query["time_in_nanos"]
                         _get_query_timings(query)
             metric_timings = {key : value / 1e6 for key, value in metric_timings.items()}
             return metric_timings

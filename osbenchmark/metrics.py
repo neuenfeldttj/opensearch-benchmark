@@ -1836,7 +1836,8 @@ class GlobalStatsCalculator:
                     )
 
                     profile_metrics = task.operation.params.get("profile-metrics", None)
-                    if profile_metrics is not None:
+                    if profile_metrics:
+                        profile_metrics.append("query_time")
                         result.add_profile_metrics(
                             t,
                             task.operation.name,
